@@ -39,8 +39,8 @@ LUCI_LANG.sv=Svenska (Swedish)
 LUCI_LANG.tr=Türkçe (Turkish)
 LUCI_LANG.uk=Українська (Ukrainian)
 LUCI_LANG.vi=Tiếng Việt (Vietnamese)
-LUCI_LANG.zh_Hans=中文 (Chinese)
-LUCI_LANG.zh_Hant=臺灣華語 (Taiwanese)
+LUCI_LANG.zh_Hans=简体中文 (Chinese Simplified)
+LUCI_LANG.zh_Hant=繁體中文 (Chinese Traditional)
 
 # Submenu titles
 LUCI_MENU.col=1. Collections
@@ -59,22 +59,34 @@ LUCI_LC_ALIAS.zh_Hant=zh-tw
 
 PKG_NAME?=$(LUCI_NAME)
 
-PKG_VERSION?=$(if $(DUMP),x,$(strip $(shell \
-	if svn info >/dev/null 2>/dev/null; then \
-		revision="svn-r$$(LC_ALL=C svn info | sed -ne 's/^Revision: //p')"; \
-	elif git log -1 >/dev/null 2>/dev/null; then \
-		revision="svn-r$$(LC_ALL=C git log -1 | sed -ne 's/.*git-svn-id: .*@\([0-9]\+\) .*/\1/p')"; \
-		if [ "$$revision" = "svn-r" ]; then \
-			set -- $$(git log -1 --format="%ct %h" --abbrev=7); \
-			secs="$$(($$1 % 86400))"; \
-			yday="$$(date --utc --date="@$$1" "+%y.%j")"; \
-			revision="$$(printf 'git-%s.%05d-%s' "$$yday" "$$secs" "$$2")"; \
-		fi; \
-	else \
-		revision="unknown"; \
-	fi; \
-	echo "$$revision" \
-)))
+
+# 1: everything expect po subdir or only po subdir
+define findrev
+  $(shell \
+    if git log -1 >/dev/null 2>/dev/null; then \
+      set -- $$(git log -1 --format="%ct %h" --abbrev=7 -- $(if $(1),. ':(exclude)po',po)); \
+      if [ -n "$$1" ]; then
+        secs="$$(($$1 % 86400))"; \
+        yday="$$(date --utc --date="@$$1" "+%y.%j")"; \
+        printf 'git-%s.%05d-%s' "$$yday" "$$secs" "$$2"; \
+      else \
+        echo "unknown"; \
+      fi; \
+    else \
+      ts=$$(find . -type f $(if $(1),-not) -path './po/*' -printf '%T@\n' 2>/dev/null | sort -rn | head -n1 | cut -d. -f1); \
+      if [ -n "$$ts" ]; then \
+        secs="$$(($$ts % 86400))"; \
+        date="$$(date --utc --date="@$$ts" "+%y%m%d")"; \
+        printf '%s.%05d' "$$date" "$$secs"; \
+      else \
+        echo "unknown"; \
+      fi; \
+    fi \
+  )
+endef
+
+PKG_PO_VERSION?=$(if $(DUMP),x,$(strip $(call findrev)))
+PKG_SRC_VERSION?=$(if $(DUMP),x,$(strip $(call findrev,1)))
 
 PKG_GITBRANCH?=$(if $(DUMP),x,$(strip $(shell \
 	variant="LuCI"; \
@@ -105,6 +117,7 @@ define Package/$(PKG_NAME)
   SUBMENU:=$(if $(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.app))
   TITLE:=$(if $(LUCI_TITLE),$(LUCI_TITLE),LuCI $(LUCI_NAME) $(LUCI_TYPE))
   DEPENDS:=$(LUCI_DEPENDS)
+  VERSION:=$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))
   $(if $(LUCI_EXTRA_DEPENDS),EXTRA_DEPENDS:=$(LUCI_EXTRA_DEPENDS))
   $(if $(LUCI_PKGARCH),PKGARCH:=$(LUCI_PKGARCH))
 endef
@@ -154,7 +167,7 @@ endef
 
 ifneq ($(wildcard ${CURDIR}/src/Makefile),)
  MAKE_PATH := src/
- MAKE_VARS += FPIC="$(FPIC)" LUCI_VERSION="$(PKG_VERSION)" LUCI_GITBRANCH="$(PKG_GITBRANCH)"
+ MAKE_VARS += FPIC="$(FPIC)" LUCI_VERSION="$(PKG_SRC_VERSION)" LUCI_GITBRANCH="$(PKG_GITBRANCH)"
 
  define Build/Compile
 	$(call Build/Compile/Default,clean compile)
@@ -191,8 +204,8 @@ endef
 
 define SubstituteVersion
 	$(FIND) $(1) -type f -name '*.htm' | while read src; do \
-		$(SED) 's/<%# *\([^ ]*\)PKG_VERSION *%>/\1$(PKG_VERSION)/g' \
-		    -e 's/"\(<%= *\(media\|resource\) *%>[^"]*\.\(js\|css\)\)"/"\1?v=$(PKG_VERSION)"/g' \
+		$(SED) 's/<%# *\([^ ]*\)PKG_VERSION *%>/\1$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))/g' \
+		    -e 's/"\(<%= *\(media\|resource\) *%>[^"]*\.\(js\|css\)\)"/"\1?v=$(if $(PKG_VERSION),$(PKG_VERSION),$(PKG_SRC_VERSION))"/g' \
 			"$$$$src"; \
 	done
 endef
@@ -246,6 +259,7 @@ define LuciTranslation
     HIDDEN:=1
     DEFAULT:=LUCI_LANG_$(2)||(ALL&&m)
     DEPENDS:=$(PKG_NAME)
+    VERSION:=$(PKG_PO_VERSION)
     PKGARCH:=all
   endef
 

@@ -1,4 +1,6 @@
 'use strict';
+'require view';
+'require dom';
 'require ui';
 'require form';
 'require rpc';
@@ -17,7 +19,7 @@ var callSetPassword = rpc.declare({
 	expect: { result: false }
 });
 
-return L.view.extend({
+return view.extend({
 	checkPassword: function(section_id, value) {
 		var strength = document.querySelector('.cbi-value-description'),
 		    strongRegex = new RegExp("^(?=.{8,})(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*\\W).*$", "g"),
@@ -42,6 +44,8 @@ return L.view.extend({
 		var m, s, o;
 
 		m = new form.JSONMap(formData, _('Router Password'), _('Changes the administrator password for accessing the device'));
+		m.readonly = !L.hasViewPermission();
+
 		s = m.section(form.NamedSection, 'password', 'password');
 
 		o = s.option(form.Value, 'pw1', _('Password'));
@@ -67,7 +71,7 @@ return L.view.extend({
 	handleSave: function() {
 		var map = document.querySelector('.cbi-map');
 
-		return L.dom.callClassMethod(map, 'save').then(function() {
+		return dom.callClassMethod(map, 'save').then(function() {
 			if (formData.password.pw1 == null || formData.password.pw1.length == 0)
 				return;
 
@@ -85,7 +89,7 @@ return L.view.extend({
 				formData.password.pw1 = null;
 				formData.password.pw2 = null;
 
-				L.dom.callClassMethod(map, 'render');
+				dom.callClassMethod(map, 'render');
 			});
 		});
 	},

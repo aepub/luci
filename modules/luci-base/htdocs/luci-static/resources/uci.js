@@ -1,5 +1,6 @@
 'use strict';
 'require rpc';
+'require baseclass';
 
 /**
  * @class uci
@@ -12,7 +13,7 @@
  * manipulation layer on top to allow for synchroneous operations on
  * UCI configuration data.
  */
-return L.Class.extend(/** @lends LuCI.uci.prototype */ {
+return baseclass.extend(/** @lends LuCI.uci.prototype */ {
 	__init__: function() {
 		this.state = {
 			newidx:  0,
@@ -30,44 +31,50 @@ return L.Class.extend(/** @lends LuCI.uci.prototype */ {
 		object: 'uci',
 		method: 'get',
 		params: [ 'config' ],
-		expect: { values: { } }
+		expect: { values: { } },
+		reject: true
 	}),
-
 
 	callOrder: rpc.declare({
 		object: 'uci',
 		method: 'order',
-		params: [ 'config', 'sections' ]
+		params: [ 'config', 'sections' ],
+		reject: true
 	}),
 
 	callAdd: rpc.declare({
 		object: 'uci',
 		method: 'add',
 		params: [ 'config', 'type', 'name', 'values' ],
-		expect: { section: '' }
+		expect: { section: '' },
+		reject: true
 	}),
 
 	callSet: rpc.declare({
 		object: 'uci',
 		method: 'set',
-		params: [ 'config', 'section', 'values' ]
+		params: [ 'config', 'section', 'values' ],
+		reject: true
 	}),
 
 	callDelete: rpc.declare({
 		object: 'uci',
 		method: 'delete',
-		params: [ 'config', 'section', 'options' ]
+		params: [ 'config', 'section', 'options' ],
+		reject: true
 	}),
 
 	callApply: rpc.declare({
 		object: 'uci',
 		method: 'apply',
-		params: [ 'timeout', 'rollback' ]
+		params: [ 'timeout', 'rollback' ],
+		reject: true
 	}),
 
 	callConfirm: rpc.declare({
 		object: 'uci',
-		method: 'confirm'
+		method: 'confirm',
+		reject: true
 	}),
 
 
@@ -546,8 +553,12 @@ return L.Class.extend(/** @lends LuCI.uci.prototype */ {
 				c[conf][sid] = {};
 
 			/* undelete option */
-			if (d[conf] && d[conf][sid])
+			if (d[conf] && d[conf][sid]) {
 				d[conf][sid] = d[conf][sid].filter(function(o) { return o !== opt });
+
+				if (d[conf][sid].length == 0)
+					delete d[conf][sid];
+			}
 
 			c[conf][sid][opt] = val;
 		}
@@ -783,22 +794,22 @@ return L.Class.extend(/** @lends LuCI.uci.prototype */ {
 		if (n)
 			for (var conf in n) {
 				for (var sid in n[conf]) {
-					var r = {
+					var p = {
 						config: conf,
 						values: { }
 					};
 
 					for (var k in n[conf][sid]) {
 						if (k == '.type')
-							r.type = n[conf][sid][k];
+							p.type = n[conf][sid][k];
 						else if (k == '.create')
-							r.name = n[conf][sid][k];
+							p.name = n[conf][sid][k];
 						else if (k.charAt(0) != '.')
-							r.values[k] = n[conf][sid][k];
+							p.values[k] = n[conf][sid][k];
 					}
 
 					snew.push(n[conf][sid]);
-					tasks.push(self.callAdd(r.config, r.type, r.name, r.values));
+					tasks.push(self.callAdd(p.config, p.type, p.name, p.values));
 				}
 
 				pkgs[conf] = true;
